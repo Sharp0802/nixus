@@ -192,9 +192,15 @@ impl Lex<'_> for Quote {
 
 impl<'a> Lex<'a> for Token<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
-        Literal::lex(src)
-            .map(Self::Literal)
-            .or_else(|e| Ident::lex(src).map(Self::Ident).map_err(|e2| e.merge(e2)))
+        let e = match Literal::lex(src) {
+            Ok(ret) => return Ok(Self::Literal(ret)),
+            Err(e) if e.is_fatal() => return Err(e),
+            Err(e) => e,
+        };
+
+        Ident::lex(src)
+            .map(Self::Ident)
+            .map_err(|e2| e.merge(e2))
             .or_else(|e| Quote::lex(src).map(Self::Quote).map_err(|e2| e.merge(e2)))
     }
 }

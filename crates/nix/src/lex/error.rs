@@ -19,7 +19,7 @@ impl std::error::Error for Error {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     InvalidDigit,
     IntegerEmpty,
@@ -35,6 +35,10 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
+    pub const fn is_fatal(&self) -> bool {
+        matches!(self, Self::IntegerOverflow | Self::IntegerUnderflow)
+    }
+
     pub fn merge(mut self, mut other: Self) -> Self {
         if let Self::Complex(vec) = &mut self {
             vec.push(other);
