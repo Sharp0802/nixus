@@ -194,7 +194,7 @@ impl<'a> Parse<'a> for Field<'a> {
         }
 
         Ok(Self {
-            range: path.range().start..expr.range().end,
+            range: path.range().start..semicolon.range().end,
             key: path,
             eq,
             value: expr,
