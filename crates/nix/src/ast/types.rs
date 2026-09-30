@@ -17,12 +17,17 @@ pub enum Expr<'a> {
     Group(Group<'a>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Operand<'a> {
+    Unary(Expr<'a>),
+    Binary(Expr<'a>, Expr<'a>),
+}
+
 #[derive(Clone, Debug, PartialEq, Span)]
 pub struct Operation<'a> {
     pub range: Range<usize>,
-    pub lhs: Box<Expr<'a>>,
-    pub op: Quote,
-    pub rhs: Box<Expr<'a>>,
+    pub operator: Quote,
+    pub operand: Box<Operand<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Span)]
