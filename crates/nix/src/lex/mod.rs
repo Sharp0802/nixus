@@ -1,10 +1,63 @@
-use std::ops::Range;
+use std::{mem::transmute, ops::Range};
 
 mod error;
 mod types;
 
 pub use error::*;
 pub use types::*;
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum QuoteId {
+    Add,
+    Sub,
+    Mul,
+    SubstL,
+    BraceL,
+    BraceR,
+    BracketL,
+    BracketR,
+    ParenL,
+    ParenR,
+    Eq,
+    Dot,
+    Semicolon,
+    __Count,
+}
+
+impl QuoteId {
+    #[rustfmt::skip]
+    const TABLE: [&'static str; Self::__Count as usize] = [
+        "+", "-", "*",
+        "${", "{", "}",
+        "[", "]", "(", ")",
+        "=", ".", ";",
+    ];
+
+    pub const fn transmute(val: u8) -> Self {
+        assert!((val as usize) < Self::TABLE.len());
+        unsafe { transmute(val) }
+    }
+
+    pub fn from_str(str: &str) -> Option<Self> {
+        for (i, ch) in Self::TABLE.iter().enumerate() {
+            if str.starts_with(ch) {
+                let en = Self::transmute(i as u8);
+                return Some(en);
+            }
+        }
+
+        None
+    }
+
+    pub const fn to_str(self) -> &'static str {
+        Self::TABLE[self as usize]
+    }
+
+    pub const fn is_op(self) -> bool {
+        matches!(self, Self::Add | Self::Sub | Self::Mul)
+    }
+}
 
 pub trait Span {
     fn range(&self) -> Range<usize>;
@@ -128,30 +181,12 @@ impl<'a> Lex<'a> for Ident<'a> {
 
 impl Lex<'_> for Quote {
     fn lex(src: &str) -> Result<Self, ErrorKind> {
-        macro_rules! entries {
-            ($($lit:literal),* $(,)?) => {
-                $(if src.starts_with($lit) {
-                    return Ok(Self { range: 0..$lit.len(), value: $lit });
-                })*
-            };
-        }
+        let id = QuoteId::from_str(src).ok_or(ErrorKind::NotQuote)?;
 
-        #[rustfmt::skip]
-        entries![
-            "::", ":",
-            "..", ".",
-            "==", "=", "!=",
-            "${", "{", "}",
-            "[", "]",
-            "<", ">",
-            "+", "-", "*", "/", "%",
-            "||", "|",
-            "&&", "&",
-            "!", "^",
-            ",", ";",
-        ];
-
-        Err(ErrorKind::NotQuote)
+        Ok(Self {
+            range: 0..id.to_str().len(),
+            value: id,
+        })
     }
 }
 
@@ -201,12 +236,5 @@ mod tests {
         assert_eq!(Token::lex("1.25").unwrap().as_literal().unwrap(), &1.25);
         assert_eq!(Token::lex("125").unwrap().as_literal().unwrap(), &125);
         assert_eq!(Token::lex("4ell0").unwrap().as_literal().unwrap(), &4);
-    }
-
-    #[test]
-    fn lex_quote() {
-        assert_eq!(Token::lex("..").unwrap().as_quote().unwrap(), &"..");
-        assert_eq!(Token::lex("!=").unwrap().as_quote().unwrap(), &"!=");
-        assert_eq!(Token::lex("!.").unwrap().as_quote().unwrap(), &"!");
     }
 }

@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::macros::Span;
+use crate::{lex::QuoteId, macros::Span};
 
 #[derive(Clone, Debug, PartialEq, Eq, Span)]
 pub struct IntegerLiteral {
@@ -78,11 +78,11 @@ impl PartialEq<&str> for Ident<'_> {
 #[derive(Clone, Debug, PartialEq, Eq, Span)]
 pub struct Quote {
     pub range: Range<usize>,
-    pub value: &'static str,
+    pub value: QuoteId,
 }
 
-impl PartialEq<&str> for Quote {
-    fn eq(&self, other: &&str) -> bool {
+impl PartialEq<QuoteId> for Quote {
+    fn eq(&self, other: &QuoteId) -> bool {
         self.value == *other
     }
 }
