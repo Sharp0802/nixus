@@ -35,8 +35,12 @@ impl QuoteId {
     const TABLE: [&'static str; Self::__Count as usize] = [
         "+", "-", "*",
         "${", "{", "}",
-        "[", "]", "(", ")",
-        "=", "...", ".", ";", "\"", ":", ",",
+        "[", "]",
+        "(", ")",
+        "=",
+        "...", ".",
+        ";", "\"",
+        ":", ",",
     ];
 
     pub const fn transmute(val: u8) -> Self {
@@ -158,18 +162,32 @@ impl<'a> Lex<'a> for Token<'a> {
 impl<'a> Lex<'a> for PathLiteral<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
         let start = usize::from(src.starts_with("~/"));
-        let end = start
-            + src[start..]
-                .bytes()
-                .take_while(|byte| {
-                    byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+' | b'/')
-                })
-                .count();
-        let value = &src[..end];
-        if !value.contains('/') {
+        let part = Self::lex_part(&src[start..])?;
+        if !part.value.contains('/') {
             return Err(ErrorKind::NotPath);
         }
-        if value.ends_with('/') || value.contains("//") || src[end..].starts_with("${") {
+        let end = start + part.range.end;
+
+        Ok(Self {
+            range: 0..end,
+            value: &src[..end],
+        })
+    }
+}
+
+impl<'a> PathLiteral<'a> {
+    fn lex_part(src: &'a str) -> Result<Self, ErrorKind> {
+        let end = src
+            .bytes()
+            .take_while(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+' | b'/')
+            })
+            .count();
+        let value = &src[..end];
+        if value.is_empty() {
+            return Err(ErrorKind::NotPath);
+        }
+        if value.contains("//") || (value.ends_with('/') && !src[end..].starts_with("${")) {
             return Err(ErrorKind::InvalidPath);
         }
 
@@ -183,6 +201,7 @@ impl<'a> Lex<'a> for PathLiteral<'a> {
 enum Mode {
     Expression,
     String(usize),
+    Path,
 }
 
 pub fn lex(str: &str) -> Result<Vec<Token<'_>>, Error> {
@@ -191,7 +210,8 @@ pub fn lex(str: &str) -> Result<Vec<Token<'_>>, Error> {
     let mut i = 0;
     while i < str.len() {
         let in_string = matches!(modes.last(), Some(Mode::String(_)));
-        if !in_string {
+        let in_path = matches!(modes.last(), Some(Mode::Path));
+        if !in_string && !in_path {
             while i < str.len() && str.as_bytes()[i].is_ascii_whitespace() {
                 i += 1;
             }
@@ -200,7 +220,19 @@ pub fn lex(str: &str) -> Result<Vec<Token<'_>>, Error> {
             }
         }
 
-        let mut tk = if in_string {
+        let mut tk = if in_path && !str[i..].starts_with("${") {
+            match PathLiteral::lex_part(&str[i..]) {
+                Ok(part) => Ok(Token::Literal(Literal::String(StringLiteral {
+                    range: part.range,
+                    value: part.value,
+                }))),
+                Err(ErrorKind::NotPath) => {
+                    modes.pop();
+                    continue;
+                }
+                Err(error) => Err(error),
+            }
+        } else if in_string {
             match StringLiteral::lex(&str[i..]) {
                 Ok(literal) => Ok(Token::Literal(Literal::String(literal))),
                 Err(ErrorKind::NotString) => Quote::lex(&str[i..]).map(Token::Quote),
@@ -210,6 +242,10 @@ pub fn lex(str: &str) -> Result<Vec<Token<'_>>, Error> {
             Token::lex(&str[i..])
         }
         .map_err(|e| Error { pos: i, kind: e })?;
+
+        if matches!(tk, Token::Literal(Literal::Path(_))) {
+            modes.push(Mode::Path);
+        }
 
         match tk.as_quote().map(|quote| quote.value) {
             Some(QuoteId::DoubleQuote) if in_string => {

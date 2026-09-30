@@ -1,6 +1,6 @@
 use std::vec;
 
-use crate::lex::{Literal, Quote, QuoteId, Span, Token};
+use crate::lex::{Literal, PathLiteral, Quote, QuoteId, Span, StringLiteral, Token};
 
 mod error;
 mod parameter;
@@ -103,7 +103,10 @@ impl<'a> Expr<'a> {
             let expr = match tk {
                 Token::Literal(_literal) => {
                     let literal = cx.next().unwrap().into_literal().unwrap();
-                    Self::Literal(literal)
+                    match literal {
+                        Literal::Path(path) => Self::parse_file_path(cx, path)?,
+                        literal => Self::Literal(literal),
+                    }
                 }
 
                 Token::Ident(..)
@@ -169,6 +172,38 @@ impl<'a> Expr<'a> {
                 return Ok(expr);
             }
         }
+    }
+
+    fn parse_file_path(cx: &mut Cx<'a>, path: PathLiteral<'a>) -> Result<Self, Error> {
+        if !cx.peek().is_some_and(|tk| {
+            tk.range().start == path.range.end
+                && tk.as_quote().is_some_and(|quote| quote == &QuoteId::SubstL)
+        }) {
+            return Ok(Self::Literal(Literal::Path(path)));
+        }
+
+        let mut range = path.range.clone();
+        let mut parts = vec![StringPart::Text(StringLiteral {
+            range: path.range,
+            value: path.value,
+        })];
+        while cx.peek().is_some_and(|tk| {
+            tk.range().start == range.end
+                && matches!(
+                    tk,
+                    Token::Literal(Literal::String(_))
+                        | Token::Quote(Quote {
+                            value: QuoteId::SubstL,
+                            ..
+                        })
+                )
+        }) {
+            let part = StringPart::parse(cx)?;
+            range.end = part.range().end;
+            parts.push(part);
+        }
+
+        Ok(Self::FilePath(FilePathExpr { range, parts }))
     }
 }
 

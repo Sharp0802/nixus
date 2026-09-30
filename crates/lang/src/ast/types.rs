@@ -11,6 +11,7 @@ use crate::macros::Span;
 pub enum Expr<'a> {
     Literal(Literal<'a>),
     String(StringExpr<'a>),
+    FilePath(FilePathExpr<'a>),
     Path(Path<'a>),
     Array(Array<'a>),
     Set(Set<'a>),
@@ -53,6 +54,12 @@ pub struct Formal<'a> {
 
 #[derive(Clone, Debug, PartialEq, Span)]
 pub struct StringExpr<'a> {
+    pub range: Range<usize>,
+    pub parts: Vec<StringPart<'a>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Span)]
+pub struct FilePathExpr<'a> {
     pub range: Range<usize>,
     pub parts: Vec<StringPart<'a>>,
 }
