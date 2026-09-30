@@ -1,6 +1,7 @@
 use std::{mem::transmute, ops::Range};
 
 mod error;
+mod number;
 mod types;
 
 pub use error::*;
@@ -26,8 +27,6 @@ pub enum QuoteId {
     DoubleQuote,
     Colon,
     Comma,
-    Question,
-    At,
     __Count,
 }
 
@@ -37,7 +36,7 @@ impl QuoteId {
         "+", "-", "*",
         "${", "{", "}",
         "[", "]", "(", ")",
-        "=", "...", ".", ";", "\"", ":", ",", "?", "@",
+        "=", "...", ".", ";", "\"", ":", ",",
     ];
 
     pub const fn transmute(val: u8) -> Self {
@@ -74,50 +73,6 @@ trait Lex<'a>: Sized {
     fn lex(src: &'a str) -> Result<Self, ErrorKind>;
 }
 
-impl Lex<'_> for IntegerLiteral {
-    fn lex(src: &str) -> Result<Self, ErrorKind> {
-        let mut i = 0;
-        while i < src.len() && src.as_bytes()[i].is_ascii_digit() {
-            i += 1;
-        }
-
-        let value: i64 = src[..i].parse()?;
-
-        Ok(Self { range: 0..i, value })
-    }
-}
-
-impl Lex<'_> for FloatLiteral {
-    fn lex(src: &str) -> Result<Self, ErrorKind> {
-        let mut dot = 1;
-        let mut i = 0;
-        while i < src.len() {
-            let ch = src.as_bytes()[i];
-            if ch == b'.' {
-                if dot <= 0 {
-                    break;
-                }
-
-                dot -= 1;
-            } else if !ch.is_ascii_digit() {
-                break;
-            }
-
-            i += 1;
-        }
-        if dot == 1 || src.as_bytes()[..i].last() == Some(&b'.') {
-            return Err(ErrorKind::NotFloat);
-        }
-        if i == 0 {
-            return Err(ErrorKind::FloatEmpty);
-        }
-
-        let value: f64 = src[..i].parse()?;
-
-        Ok(Self { range: 0..i, value })
-    }
-}
-
 impl<'a> Lex<'a> for StringLiteral<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
         let mut i = 0;
@@ -140,16 +95,6 @@ impl<'a> Lex<'a> for StringLiteral<'a> {
         Ok(Self {
             range: 0..i,
             value: &src[..i],
-        })
-    }
-}
-
-impl<'a> Lex<'a> for Literal<'a> {
-    fn lex(src: &'a str) -> Result<Self, ErrorKind> {
-        FloatLiteral::lex(src).map(Self::Float).or_else(|e| {
-            IntegerLiteral::lex(src)
-                .map(Self::Integer)
-                .map_err(|e2| e.merge(e2))
         })
     }
 }
@@ -188,15 +133,18 @@ impl Lex<'_> for Quote {
 
 impl<'a> Lex<'a> for Token<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
-        let e = match Literal::lex(src) {
-            Ok(ret) => return Ok(Self::Literal(ret)),
-            Err(e) if e.is_fatal() => return Err(e),
-            Err(e) => e,
-        };
+        if src.as_bytes().first().is_some_and(u8::is_ascii_digit) {
+            return Literal::lex(src).map(Self::Literal);
+        }
 
         Ident::lex(src)
-            .map(Self::Ident)
-            .map_err(|e2| e.merge(e2))
+            .map(|ident| match ident.value {
+                "true" | "false" => Self::Literal(Literal::Bool(BoolLiteral {
+                    range: ident.range,
+                    value: ident.value == "true",
+                })),
+                _ => Self::Ident(ident),
+            })
             .or_else(|e| Quote::lex(src).map(Self::Quote).map_err(|e2| e.merge(e2)))
     }
 }
@@ -268,13 +216,14 @@ mod tests {
         assert_eq!(Token::lex("hello").unwrap().as_ident().unwrap(), &"hello");
         assert_eq!(Token::lex("h3ll0").unwrap().as_ident().unwrap(), &"h3ll0");
         assert_eq!(Token::lex("ha wo").unwrap().as_ident().unwrap(), &"ha");
-        assert!(Token::lex("4ell0").unwrap().as_ident().is_none());
+        assert!(Token::lex("4ell0").is_err());
     }
 
     #[test]
     fn lex_literal() {
         assert_eq!(Token::lex("1.25").unwrap().as_literal().unwrap(), &1.25);
         assert_eq!(Token::lex("125").unwrap().as_literal().unwrap(), &125);
-        assert_eq!(Token::lex("4ell0").unwrap().as_literal().unwrap(), &4);
+        assert_eq!(Token::lex("true").unwrap().as_literal().unwrap(), &true);
+        assert_eq!(Token::lex("false").unwrap().as_literal().unwrap(), &false);
     }
 }

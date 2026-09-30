@@ -3,6 +3,18 @@ use std::ops::Range;
 use crate::{lex::QuoteId, macros::Span};
 
 #[derive(Clone, Debug, PartialEq, Eq, Span)]
+pub struct BoolLiteral {
+    pub range: Range<usize>,
+    pub value: bool,
+}
+
+impl PartialEq<bool> for BoolLiteral {
+    fn eq(&self, other: &bool) -> bool {
+        self.value == *other
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Span)]
 pub struct IntegerLiteral {
     pub range: Range<usize>,
     pub value: i64,
@@ -40,9 +52,16 @@ impl PartialEq<&str> for StringLiteral<'_> {
 
 #[derive(Clone, Debug, PartialEq, Span)]
 pub enum Literal<'a> {
+    Bool(BoolLiteral),
     Integer(IntegerLiteral),
     Float(FloatLiteral),
     String(StringLiteral<'a>),
+}
+
+impl PartialEq<bool> for Literal<'_> {
+    fn eq(&self, other: &bool) -> bool {
+        matches!(self, Self::Bool(boolean) if boolean == other)
+    }
 }
 
 impl PartialEq<i64> for Literal<'_> {

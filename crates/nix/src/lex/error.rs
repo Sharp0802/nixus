@@ -26,7 +26,9 @@ pub enum ErrorKind {
     IntegerOverflow,
     IntegerUnderflow,
     NotFloat,
-    FloatEmpty,
+    FloatOverflow,
+    InvalidExponent,
+    LiteralSuffix,
     NotString,
     StringUnclosed,
     IdentEmpty,
@@ -35,14 +37,6 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
-    pub fn is_fatal(&self) -> bool {
-        if let Self::Complex(vec) = self {
-            vec.iter().any(Self::is_fatal)
-        } else {
-            matches!(self, Self::IntegerOverflow | Self::IntegerUnderflow)
-        }
-    }
-
     pub fn merge(mut self, mut other: Self) -> Self {
         if let Self::Complex(vec) = &mut self {
             vec.push(other);
@@ -67,7 +61,9 @@ impl Display for ErrorKind {
             Self::IntegerOverflow => write!(f, "integer too big"),
             Self::IntegerUnderflow => write!(f, "integer too small"),
             Self::NotFloat => write!(f, "it is not float"),
-            Self::FloatEmpty => write!(f, "float cannot be empty"),
+            Self::FloatOverflow => write!(f, "float too big"),
+            Self::InvalidExponent => write!(f, "float exponent requires digits"),
+            Self::LiteralSuffix => write!(f, "literal suffixes are not supported"),
             Self::NotString => write!(f, "it is not string"),
             Self::StringUnclosed => write!(f, "string unclosed"),
             Self::IdentEmpty => write!(f, "identifier cannot be empty"),
