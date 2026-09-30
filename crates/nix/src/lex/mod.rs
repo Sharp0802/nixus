@@ -23,6 +23,7 @@ pub enum QuoteId {
     Dot,
     Semicolon,
     DoubleQuote,
+    Colon,
     __Count,
 }
 
@@ -32,7 +33,7 @@ impl QuoteId {
         "+", "-", "*",
         "${", "{", "}",
         "[", "]", "(", ")",
-        "=", ".", ";", "\"",
+        "=", ".", ";", "\"", ":",
     ];
 
     pub const fn transmute(val: u8) -> Self {

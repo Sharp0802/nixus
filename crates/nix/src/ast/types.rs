@@ -17,7 +17,16 @@ pub enum Expr<'a> {
     Subst(Subst<'a>),
     Operation(Operation<'a>),
     Call(Call<'a>),
+    Lambda(Lambda<'a>),
     Group(Group<'a>),
+}
+
+#[derive(Clone, Debug, PartialEq, Span)]
+pub struct Lambda<'a> {
+    pub range: Range<usize>,
+    pub parameter: Ident<'a>,
+    pub colon: Quote,
+    pub body: Box<Expr<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Span)]

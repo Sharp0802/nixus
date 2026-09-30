@@ -23,7 +23,42 @@ pub trait Parse<'a>: Sized {
 
 impl<'a> Parse<'a> for Expr<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
-        Self::parse_inner(cx, false)
+        let expr = Self::parse_inner(cx, false)?;
+        let Some(Token::Quote(colon)) =
+            cx.next_if(|tk| tk.as_quote().is_some_and(|quote| quote == &QuoteId::Colon))
+        else {
+            return Ok(expr);
+        };
+
+        let range = expr.range();
+        let parameter = match expr {
+            Self::Path(mut path) => match path.segments.pop() {
+                Some((PathSegment::Ident(parameter), None)) if path.segments.is_empty() => {
+                    Some(parameter)
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+        .ok_or(Error {
+            range,
+            kind: ErrorKind::NotParameter,
+        })?;
+
+        if cx.peek().is_none() {
+            return Err(Error {
+                range: colon.range.end..colon.range.end,
+                kind: ErrorKind::Empty,
+            });
+        }
+
+        let body = Self::parse(cx)?;
+        Ok(Self::Lambda(Lambda {
+            range: parameter.range.start..body.range().end,
+            parameter,
+            colon,
+            body: Box::new(body),
+        }))
     }
 
     fn parse_item(cx: &mut Cx<'a>) -> Result<Self, Error> {
