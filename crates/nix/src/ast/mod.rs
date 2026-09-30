@@ -15,18 +15,27 @@ pub trait Parse<'a>: Sized {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error>;
 }
 
+const fn precedence(operator: QuoteId) -> u8 {
+    match operator {
+        QuoteId::Add | QuoteId::Sub => 1,
+        QuoteId::Mul => 2,
+        _ => unreachable!(),
+    }
+}
+
 impl<'a> Parse<'a> for Expr<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
-        let mut stack = Vec::new();
+        let mut stack: Vec<(Option<Self>, Quote)> = Vec::new();
         loop {
             let Some(tk) = cx.peek() else {
+                let end = stack.last().map_or(0, |(_, operator)| operator.range.end);
                 return Err(Error {
-                    range: 0..0,
+                    range: end..end,
                     kind: ErrorKind::Empty,
                 });
             };
 
-            let expr = match tk {
+            let mut expr = match tk {
                 Token::Literal(_literal) => {
                     let literal = cx.next().unwrap().into_literal().unwrap();
                     Self::Literal(literal)
@@ -63,6 +72,15 @@ impl<'a> Parse<'a> for Expr<'a> {
                     Self::Array(array)
                 }
 
+                Token::Quote(Quote {
+                    value: QuoteId::Sub,
+                    ..
+                }) => {
+                    let operator = cx.next().unwrap().into_quote().unwrap();
+                    stack.push((None, operator));
+                    continue;
+                }
+
                 Token::Quote(Quote { .. }) => {
                     return Err(Error {
                         range: tk.range(),
@@ -71,21 +89,34 @@ impl<'a> Parse<'a> for Expr<'a> {
                 }
             };
 
-            stack.push(expr);
+            let next = cx
+                .next_if(|tk| tk.as_quote().is_some_and(|quote| quote.value.is_op()))
+                .map(|tk| tk.into_quote().unwrap());
 
-            if let Some(Token::Quote(quote)) = cx.peek()
-                && quote.value.is_op()
-            {
-                todo!()
-            } else {
-                break;
+            while stack.last().is_some_and(|(lhs, operator)| {
+                lhs.is_none()
+                    || next
+                        .as_ref()
+                        .is_none_or(|next| precedence(operator.value) >= precedence(next.value))
+            }) {
+                let (lhs, operator) = stack.pop().unwrap();
+                let end = expr.range().end;
+                let (start, operand) = match lhs {
+                    Some(lhs) => (lhs.range().start, Operand::Binary(lhs, expr)),
+                    None => (operator.range.start, Operand::Unary(expr)),
+                };
+                expr = Self::Operation(Operation {
+                    range: start..end,
+                    operator,
+                    operand: Box::new(operand),
+                });
             }
-        }
 
-        if stack.len() == 1 {
-            Ok(stack.into_iter().next().unwrap())
-        } else {
-            todo!()
+            if let Some(operator) = next {
+                stack.push((Some(expr), operator));
+            } else {
+                return Ok(expr);
+            }
         }
     }
 }
