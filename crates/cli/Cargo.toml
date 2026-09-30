@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-nixus-nix.workspace = true
+nixus-lang.workspace = true
 
 [lints]
 workspace = true

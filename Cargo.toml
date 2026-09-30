@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cli", "crates/macros", "crates/nix"]
+members = ["crates/cli", "crates/macros", "crates/lang"]
 resolver = "3"
 
 [workspace.package]
@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 nixus = { path = "crates/cli" }
-nixus-nix = { path = "crates/nix" }
+nixus-lang = { path = "crates/lang" }
 nixus-macros = { path = "crates/macros" }
 
 criterion = "0.8"
