@@ -88,7 +88,7 @@ impl Lex<'_> for IntegerLiteral {
 impl Lex<'_> for FloatLiteral {
     fn lex(src: &str) -> Result<Self, ErrorKind> {
         let mut dot = 1;
-        let mut i = usize::from(src.starts_with('+') || src.starts_with('-'));
+        let mut i = 0;
         while i < src.len() {
             let ch = src.as_bytes()[i];
             if ch == b'.' {
