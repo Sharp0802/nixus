@@ -3,6 +3,7 @@ use std::ops::Range;
 use crate::lex::Ident;
 use crate::lex::Literal;
 use crate::lex::Quote;
+use crate::lex::QuoteId;
 use crate::macros::Span;
 
 #[derive(Clone, Debug, PartialEq, Span)]
@@ -12,6 +13,16 @@ pub enum Expr<'a> {
     Array(Array<'a>),
     Set(Set<'a>),
     Subst(Subst<'a>),
+    Operation(Operation<'a>),
+    Group(Group<'a>),
+}
+
+#[derive(Clone, Debug, PartialEq, Span)]
+pub struct Operation<'a> {
+    pub range: Range<usize>,
+    pub lhs: Box<Expr<'a>>,
+    pub op: Quote,
+    pub rhs: Box<Expr<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Span)]
@@ -36,7 +47,7 @@ pub struct Field<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Span)]
-pub struct Subst<'a> {
+pub struct Boxed<'a, const P: u8, const Q: u8> {
     pub range: Range<usize>,
     pub open: Quote,
     pub close: Quote,
@@ -44,12 +55,14 @@ pub struct Subst<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Span)]
-pub struct Group<T, const P: u8, const Q: u8> {
+pub struct Punctuated<T, const P: u8, const Q: u8> {
     pub range: Range<usize>,
     pub open: Quote,
     pub close: Quote,
     pub items: Vec<T>,
 }
 
-pub type Array<'a> = Group<Expr<'a>, b'[', b']'>;
-pub type Set<'a> = Group<Field<'a>, b'{', b'}'>;
+pub type Subst<'a> = Boxed<'a, { QuoteId::SubstL as u8 }, { QuoteId::BraceR as u8 }>;
+pub type Group<'a> = Boxed<'a, { QuoteId::ParenL as u8 }, { QuoteId::ParenR as u8 }>;
+pub type Array<'a> = Punctuated<Expr<'a>, { QuoteId::BracketL as u8 }, { QuoteId::BracketR as u8 }>;
+pub type Set<'a> = Punctuated<Field<'a>, { QuoteId::BraceL as u8 }, { QuoteId::BraceR as u8 }>;

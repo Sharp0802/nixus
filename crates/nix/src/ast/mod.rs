@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::vec;
 
-use crate::lex::{Quote, Span, Token};
+use crate::lex::{Quote, QuoteId, Span, Token};
 
 mod error;
 mod types;
@@ -17,44 +17,83 @@ pub trait Parse<'a>: Sized {
 
 impl<'a> Parse<'a> for Expr<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
-        let Some(tk) = cx.peek() else {
-            return Err(Error {
-                range: 0..0,
-                kind: ErrorKind::Empty,
-            });
-        };
+        let mut stack = Vec::new();
+        loop {
+            let Some(tk) = cx.peek() else {
+                return Err(Error {
+                    range: 0..0,
+                    kind: ErrorKind::Empty,
+                });
+            };
 
-        match tk {
-            Token::Literal(_literal) => {
-                let literal = cx.next().unwrap().into_literal().unwrap();
-                Ok(Self::Literal(literal))
-            }
+            let expr = match tk {
+                Token::Literal(_literal) => {
+                    let literal = cx.next().unwrap().into_literal().unwrap();
+                    Self::Literal(literal)
+                }
 
-            Token::Ident(..) | Token::Quote(Quote { value: "${", .. }) => {
-                let path = Path::parse(cx)?;
-                Ok(Self::Path(path))
-            }
+                Token::Ident(..)
+                | Token::Quote(Quote {
+                    value: QuoteId::SubstL,
+                    ..
+                }) => {
+                    let path = Path::parse(cx)?;
+                    Self::Path(path)
+                }
 
-            Token::Quote(Quote { value: "{", .. }) => {
-                let set = Set::parse(cx)?;
-                Ok(Self::Set(set))
-            }
-            Token::Quote(Quote { value: "[", .. }) => {
-                let array = Array::parse(cx)?;
-                Ok(Self::Array(array))
-            }
+                Token::Quote(Quote {
+                    value: QuoteId::ParenL,
+                    ..
+                }) => {
+                    let group = Group::parse(cx)?;
+                    Self::Group(group)
+                }
+                Token::Quote(Quote {
+                    value: QuoteId::BraceL,
+                    ..
+                }) => {
+                    let set = Set::parse(cx)?;
+                    Self::Set(set)
+                }
+                Token::Quote(Quote {
+                    value: QuoteId::BracketL,
+                    ..
+                }) => {
+                    let array = Array::parse(cx)?;
+                    Self::Array(array)
+                }
 
-            Token::Quote(Quote { .. }) => {
-                todo!();
+                Token::Quote(Quote { .. }) => {
+                    return Err(Error {
+                        range: tk.range(),
+                        kind: ErrorKind::NotExpr,
+                    });
+                }
+            };
+
+            stack.push(expr);
+
+            if let Some(Token::Quote(quote)) = cx.peek()
+                && quote.value.is_op()
+            {
+                todo!()
+            } else {
+                break;
             }
+        }
+
+        if stack.len() == 1 {
+            Ok(stack.into_iter().next().unwrap())
+        } else {
+            todo!()
         }
     }
 }
 
-impl<'a, T: Parse<'a> + Span, const P: u8, const Q: u8> Parse<'a> for Group<T, P, Q> {
+impl<'a, T: Parse<'a> + Span, const P: u8, const Q: u8> Parse<'a> for Punctuated<T, P, Q> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
-        let open_str: &'static str = const { str::from_utf8(&[P]) }.unwrap();
-        let close_str: &'static str = const { str::from_utf8(&[Q]) }.unwrap();
+        let open_id = const { QuoteId::transmute(P) };
+        let close_id = const { QuoteId::transmute(Q) };
 
         let open = cx
             .next()
@@ -65,12 +104,12 @@ impl<'a, T: Parse<'a> + Span, const P: u8, const Q: u8> Parse<'a> for Group<T, P
             })
             .map_err(|e| Error {
                 range: e,
-                kind: ErrorKind::Missing(open_str),
+                kind: ErrorKind::Missing(open_id),
             })?;
-        if open != open_str {
+        if open != open_id {
             return Err(Error {
                 range: open.range,
-                kind: ErrorKind::Missing(open_str),
+                kind: ErrorKind::Missing(open_id),
             });
         }
 
@@ -78,7 +117,7 @@ impl<'a, T: Parse<'a> + Span, const P: u8, const Q: u8> Parse<'a> for Group<T, P
         while cx
             .peek()
             .and_then(|tk| tk.as_quote())
-            .is_none_or(|quote| quote != &close_str)
+            .is_none_or(|quote| quote != &close_id)
         {
             let item = T::parse(cx)?;
             vec.push(item);
@@ -94,12 +133,12 @@ impl<'a, T: Parse<'a> + Span, const P: u8, const Q: u8> Parse<'a> for Group<T, P
             })
             .map_err(|e| Error {
                 range: e,
-                kind: ErrorKind::Missing(close_str),
+                kind: ErrorKind::Missing(close_id),
             })?;
-        if close != close_str {
+        if close != close_id {
             return Err(Error {
                 range: close.range,
-                kind: ErrorKind::Missing(close_str),
+                kind: ErrorKind::Missing(close_id),
             });
         }
 
@@ -125,12 +164,12 @@ impl<'a> Parse<'a> for Field<'a> {
             })
             .map_err(|e| Error {
                 range: e,
-                kind: ErrorKind::Missing("="),
+                kind: ErrorKind::Missing(QuoteId::Eq),
             })?;
-        if eq != "=" {
+        if eq != QuoteId::Eq {
             return Err(Error {
                 range: eq.range,
-                kind: ErrorKind::Missing("="),
+                kind: ErrorKind::Missing(QuoteId::Eq),
             });
         }
 
@@ -145,12 +184,12 @@ impl<'a> Parse<'a> for Field<'a> {
             })
             .map_err(|e| Error {
                 range: e,
-                kind: ErrorKind::Missing(";"),
+                kind: ErrorKind::Missing(QuoteId::Semicolon),
             })?;
-        if semicolon != ";" {
+        if semicolon != QuoteId::Semicolon {
             return Err(Error {
                 range: semicolon.range,
-                kind: ErrorKind::Missing(";"),
+                kind: ErrorKind::Missing(QuoteId::Semicolon),
             });
         }
 
@@ -164,8 +203,11 @@ impl<'a> Parse<'a> for Field<'a> {
     }
 }
 
-impl<'a> Parse<'a> for Subst<'a> {
+impl<'a, const P: u8, const Q: u8> Parse<'a> for Boxed<'a, P, Q> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
+        let open_id = const { QuoteId::transmute(P) };
+        let close_id = const { QuoteId::transmute(Q) };
+
         let open = cx
             .next()
             .ok_or(0..0)
@@ -175,12 +217,12 @@ impl<'a> Parse<'a> for Subst<'a> {
             })
             .map_err(|e| Error {
                 range: e,
-                kind: ErrorKind::NotSubst,
+                kind: ErrorKind::Missing(open_id),
             })?;
-        if open != "${" {
+        if open != open_id {
             return Err(Error {
                 range: open.range(),
-                kind: ErrorKind::NotSubst,
+                kind: ErrorKind::Missing(open_id),
             });
         }
 
@@ -196,8 +238,14 @@ impl<'a> Parse<'a> for Subst<'a> {
             })
             .map_err(|e| Error {
                 range: e,
-                kind: ErrorKind::PathUnclosed,
+                kind: ErrorKind::Missing(close_id),
             })?;
+        if close != close_id {
+            return Err(Error {
+                range: close.range(),
+                kind: ErrorKind::Missing(close_id),
+            });
+        }
 
         Ok(Self {
             range: open.range.start..close.range.end,
@@ -220,7 +268,10 @@ impl<'a> Parse<'a> for PathSegment<'a> {
                 let ident = cx.next().unwrap().into_ident().unwrap();
                 Ok(Self::Ident(ident))
             }
-            Token::Quote(Quote { value: "${", .. }) => {
+            Token::Quote(Quote {
+                value: QuoteId::SubstL,
+                ..
+            }) => {
                 let subst = Subst::parse(cx)?;
                 Ok(Self::Subst(subst))
             }
@@ -241,7 +292,10 @@ impl<'a> Parse<'a> for Path<'a> {
         loop {
             if !matches!(
                 cx.peek().and_then(|tk| tk.as_quote()),
-                Some(Quote { value: ".", .. })
+                Some(Quote {
+                    value: QuoteId::Dot,
+                    ..
+                })
             ) {
                 break;
             }
