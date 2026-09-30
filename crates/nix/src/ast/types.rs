@@ -24,9 +24,33 @@ pub enum Expr<'a> {
 #[derive(Clone, Debug, PartialEq, Span)]
 pub struct Lambda<'a> {
     pub range: Range<usize>,
-    pub parameter: Ident<'a>,
+    pub parameter: Parameter<'a>,
     pub colon: Quote,
     pub body: Box<Expr<'a>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Span)]
+pub enum Parameter<'a> {
+    Ident(Ident<'a>),
+    Set(Box<SetPattern<'a>>),
+}
+
+#[derive(Clone, Debug, PartialEq, Span)]
+pub struct SetPattern<'a> {
+    pub range: Range<usize>,
+    pub open: Quote,
+    pub close: Quote,
+    pub formals: Vec<Formal<'a>>,
+    pub ellipsis: Option<Quote>,
+    pub binding: Option<(Quote, Ident<'a>)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Span)]
+pub struct Formal<'a> {
+    pub range: Range<usize>,
+    pub name: Ident<'a>,
+    pub default: Option<(Quote, Expr<'a>)>,
+    pub comma: Option<Quote>,
 }
 
 #[derive(Clone, Debug, PartialEq, Span)]

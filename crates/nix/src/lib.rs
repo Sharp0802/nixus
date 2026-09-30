@@ -5,7 +5,7 @@ use std::{fmt::Display, ops::Range};
 mod ast;
 mod lex;
 
-use ast::{Expr, Parse};
+use ast::{Cx, Expr, Parse};
 use lex::Span;
 use nixus_macros as macros;
 
@@ -42,7 +42,7 @@ impl From<lex::Error> for Error {
 
 pub fn parse(str: &str) -> Result<Expr<'_>, Error> {
     let tokens = lex::lex(str)?;
-    let mut iter = tokens.into_iter().peekable();
+    let mut iter = Cx::new(tokens);
 
     let expr = Expr::parse(&mut iter)?;
 

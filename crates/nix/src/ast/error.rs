@@ -25,6 +25,7 @@ pub enum ErrorKind {
     NotPath,
     NotPathSegment,
     NotParameter,
+    DuplicateParameter,
     PathUnclosed,
     Missing(QuoteId),
 }
@@ -37,7 +38,8 @@ impl Display for ErrorKind {
             Self::NotSubst => write!(f, "it is not substitution"),
             Self::NotPath => write!(f, "it is not path"),
             Self::NotPathSegment => write!(f, "it is not path segment"),
-            Self::NotParameter => write!(f, "function parameter must be a single identifier"),
+            Self::NotParameter => write!(f, "invalid function parameter"),
+            Self::DuplicateParameter => write!(f, "duplicate function parameter"),
             Self::PathUnclosed => write!(f, "path not closed"),
             Self::Missing(id) => write!(f, "missing '{}'", id.to_str()),
         }

@@ -1,9 +1,9 @@
-use std::iter::Peekable;
 use std::vec;
 
 use crate::lex::{Literal, Quote, QuoteId, Span, Token};
 
 mod error;
+mod parameter;
 mod stack;
 mod types;
 
@@ -11,7 +11,49 @@ pub use error::*;
 use stack::*;
 pub use types::*;
 
-type Cx<'a> = Peekable<vec::IntoIter<Token<'a>>>;
+pub struct Cx<'a> {
+    tokens: vec::IntoIter<Token<'a>>,
+    end: usize,
+}
+
+impl<'a> Cx<'a> {
+    pub fn new(tokens: Vec<Token<'a>>) -> Self {
+        Self {
+            tokens: tokens.into_iter(),
+            end: 0,
+        }
+    }
+
+    fn peek(&self) -> Option<&Token<'a>> {
+        self.peek_nth(0)
+    }
+
+    fn peek_nth(&self, index: usize) -> Option<&Token<'a>> {
+        self.tokens.as_slice().get(index)
+    }
+
+    fn next_if(&mut self, predicate: impl FnOnce(&Token<'a>) -> bool) -> Option<Token<'a>> {
+        if self.peek().is_some_and(predicate) {
+            self.next()
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> Iterator for Cx<'a> {
+    type Item = Token<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let token = self.tokens.next()?;
+        self.end = token.range().end;
+        Some(token)
+    }
+
+    fn last(self) -> Option<Self::Item> {
+        self.tokens.last()
+    }
+}
 
 pub trait Parse<'a>: Sized {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error>;
@@ -23,42 +65,22 @@ pub trait Parse<'a>: Sized {
 
 impl<'a> Parse<'a> for Expr<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
-        let expr = Self::parse_inner(cx, false)?;
-        let Some(Token::Quote(colon)) =
-            cx.next_if(|tk| tk.as_quote().is_some_and(|quote| quote == &QuoteId::Colon))
-        else {
-            return Ok(expr);
-        };
-
-        let range = expr.range();
-        let parameter = match expr {
-            Self::Path(mut path) => match path.segments.pop() {
-                Some((PathSegment::Ident(parameter), None)) if path.segments.is_empty() => {
-                    Some(parameter)
-                }
-                _ => None,
-            },
-            _ => None,
+        if parameter::starts_parameter(cx) {
+            return Lambda::parse(cx).map(Self::Lambda);
         }
-        .ok_or(Error {
-            range,
-            kind: ErrorKind::NotParameter,
-        })?;
 
-        if cx.peek().is_none() {
+        let expr = Self::parse_inner(cx, false)?;
+        if cx
+            .peek()
+            .is_some_and(|tk| tk.as_quote().is_some_and(|quote| quote == &QuoteId::Colon))
+        {
             return Err(Error {
-                range: colon.range.end..colon.range.end,
-                kind: ErrorKind::Empty,
+                range: expr.range(),
+                kind: ErrorKind::NotParameter,
             });
         }
 
-        let body = Self::parse(cx)?;
-        Ok(Self::Lambda(Lambda {
-            range: parameter.range.start..body.range().end,
-            parameter,
-            colon,
-            body: Box::new(body),
-        }))
+        Ok(expr)
     }
 
     fn parse_item(cx: &mut Cx<'a>) -> Result<Self, Error> {
