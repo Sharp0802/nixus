@@ -6,6 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+nixus-macros.workspace = true
+
 tracing.workspace = true
 
 [dev-dependencies]
