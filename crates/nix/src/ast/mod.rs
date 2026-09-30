@@ -4,9 +4,11 @@ use std::vec;
 use crate::lex::{Quote, QuoteId, Span, Token};
 
 mod error;
+mod stack;
 mod types;
 
 pub use error::*;
+use stack::*;
 pub use types::*;
 
 type Cx<'a> = Peekable<vec::IntoIter<Token<'a>>>;
@@ -15,27 +17,19 @@ pub trait Parse<'a>: Sized {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error>;
 }
 
-const fn precedence(operator: QuoteId) -> u8 {
-    match operator {
-        QuoteId::Add | QuoteId::Sub => 1,
-        QuoteId::Mul => 2,
-        _ => unreachable!(),
-    }
-}
-
 impl<'a> Parse<'a> for Expr<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
-        let mut stack: Vec<(Option<Self>, Quote)> = Vec::new();
+        let mut stack = Stack::default();
         loop {
             let Some(tk) = cx.peek() else {
-                let end = stack.last().map_or(0, |(_, operator)| operator.range.end);
+                let end = stack.end();
                 return Err(Error {
                     range: end..end,
                     kind: ErrorKind::Empty,
                 });
             };
 
-            let mut expr = match tk {
+            let expr = match tk {
                 Token::Literal(_literal) => {
                     let literal = cx.next().unwrap().into_literal().unwrap();
                     Self::Literal(literal)
@@ -77,7 +71,7 @@ impl<'a> Parse<'a> for Expr<'a> {
                     ..
                 }) => {
                     let operator = cx.next().unwrap().into_quote().unwrap();
-                    stack.push((None, operator));
+                    stack.push_unary(operator);
                     continue;
                 }
 
@@ -89,32 +83,7 @@ impl<'a> Parse<'a> for Expr<'a> {
                 }
             };
 
-            let next = cx
-                .next_if(|tk| tk.as_quote().is_some_and(|quote| quote.value.is_op()))
-                .map(|tk| tk.into_quote().unwrap());
-
-            while stack.last().is_some_and(|(lhs, operator)| {
-                lhs.is_none()
-                    || next
-                        .as_ref()
-                        .is_none_or(|next| precedence(operator.value) >= precedence(next.value))
-            }) {
-                let (lhs, operator) = stack.pop().unwrap();
-                let end = expr.range().end;
-                let (start, operand) = match lhs {
-                    Some(lhs) => (lhs.range().start, Operand::Binary(lhs, expr)),
-                    None => (operator.range.start, Operand::Unary(expr)),
-                };
-                expr = Self::Operation(Operation {
-                    range: start..end,
-                    operator,
-                    operand: Box::new(operand),
-                });
-            }
-
-            if let Some(operator) = next {
-                stack.push((Some(expr), operator));
-            } else {
+            if let Some(expr) = stack.reduce(expr, cx) {
                 return Ok(expr);
             }
         }
