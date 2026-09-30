@@ -3,6 +3,7 @@
 use std::{fmt::Display, ops::Range};
 
 mod ast;
+mod hir;
 mod lex;
 
 use ast::{Cx, Expr, Parse};
