@@ -1,8 +1,5 @@
-# MacOS DS_Store files
+.direnv/
+target/
+result
 .DS_Store
 ._.DS_Store
-**/.DS_Store
-**/._.DS_Store
-
-# Nix build output file
-result

@@ -1,30 +1,36 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
-    flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
-    import-tree.url = "github:vic/import-tree";
-
-    colmena.url = "github:zhaofengli/colmena";
-
-    nix-unit.url = "github:nix-community/nix-unit?tag=v2.34.0";
-    nix-unit.inputs.nixpkgs.follows = "nixpkgs";
+    flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs = { ... } @ inputs:
-    inputs.flake-parts.lib.mkFlake { inherit inputs; } ({ flake-parts-lib, withSystem, ... } : let
-      flakeModule = flake-parts-lib.importApply ./flake-module.nix { inherit inputs; inherit withSystem; };
-      checkModule = flake-parts-lib.importApply ./check-module.nix { inherit inputs; inherit withSystem; };
-    in {
-      # The flakeModule is the only flake output. Import this to use the framework.
-      flake = { inherit flakeModule; };
-
-      systems = [ "aarch64-darwin" "x86_64-darwin" "x86_64-linux" ];
-
-      imports = [
-        flakeModule
-        checkModule
-      ];
-
-    });
+  outputs =
+    {
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+      ...
+    }:
+    flake-utils.lib.eachSystem [
+      "aarch64-linux"
+      "x86_64-linux"
+    ] (
+      system:
+      let
+        overlays = [
+          rust-overlay.overlays.default
+        ];
+        pkgs = import nixpkgs { inherit system overlays; };
+      in
+      {
+        devShells.default = pkgs.mkShell {
+          packages = with pkgs; [
+            cargo-deny
+            cargo-llvm-cov
+            (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
+          ];
+        };
+      }
+    );
 }
