@@ -29,27 +29,25 @@ pub struct Lambda<'a> {
     pub body: Box<Expr<'a>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Span)]
+#[derive(Clone, Debug, PartialEq, Eq, Span)]
 pub enum Parameter<'a> {
     Ident(Ident<'a>),
     Set(Box<SetPattern<'a>>),
 }
 
-#[derive(Clone, Debug, PartialEq, Span)]
+#[derive(Clone, Debug, PartialEq, Eq, Span)]
 pub struct SetPattern<'a> {
     pub range: Range<usize>,
     pub open: Quote,
     pub close: Quote,
     pub formals: Vec<Formal<'a>>,
     pub ellipsis: Option<Quote>,
-    pub binding: Option<(Quote, Ident<'a>)>,
 }
 
-#[derive(Clone, Debug, PartialEq, Span)]
+#[derive(Clone, Debug, PartialEq, Eq, Span)]
 pub struct Formal<'a> {
     pub range: Range<usize>,
     pub name: Ident<'a>,
-    pub default: Option<(Quote, Expr<'a>)>,
     pub comma: Option<Quote>,
 }
 

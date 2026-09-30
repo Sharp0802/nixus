@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::lex::{Ident, Quote, QuoteId, Span, Token};
 
 use super::{Cx, Error, ErrorKind, Expr, Formal, Lambda, Parameter, Parse, SetPattern};
@@ -11,18 +9,11 @@ pub(super) fn starts_parameter(cx: &Cx<'_>) -> bool {
         .map(|quote| quote.value);
 
     match (cx.peek(), cx.peek_nth(1)) {
-        (Some(Token::Ident(_)), Some(Token::Quote(quote))) => {
-            matches!(quote.value, QuoteId::Colon | QuoteId::At)
-        }
+        (Some(Token::Ident(_)), Some(Token::Quote(quote))) => quote == &QuoteId::Colon,
         (Some(Token::Quote(open)), Some(next)) if open == &QuoteId::BraceL => match next {
-            Token::Ident(_) => matches!(
-                third,
-                Some(QuoteId::Comma | QuoteId::Question | QuoteId::BraceR)
-            ),
+            Token::Ident(_) => matches!(third, Some(QuoteId::Comma | QuoteId::BraceR)),
             Token::Quote(quote) if quote == &QuoteId::Ellipsis => true,
-            Token::Quote(quote) if quote == &QuoteId::BraceR => {
-                matches!(third, Some(QuoteId::Colon | QuoteId::At))
-            }
+            Token::Quote(quote) if quote == &QuoteId::BraceR => third == Some(QuoteId::Colon),
             _ => false,
         },
         _ => false,
@@ -53,22 +44,10 @@ impl<'a> Parse<'a> for Lambda<'a> {
 impl<'a> Parse<'a> for Parameter<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
         if matches!(cx.peek(), Some(Token::Ident(_))) {
-            let name = expect_ident(cx)?;
-            let Some(at) = take_quote(cx, QuoteId::At) else {
-                return Ok(Self::Ident(name));
-            };
-
-            let mut pattern = SetPattern::parse(cx)?;
-            pattern.set_binding(at, name)?;
-            return Ok(Self::Set(Box::new(pattern)));
+            return expect_ident(cx).map(Self::Ident);
         }
 
-        let mut pattern = SetPattern::parse(cx)?;
-        if let Some(at) = take_quote(cx, QuoteId::At) {
-            let name = expect_ident(cx)?;
-            pattern.set_binding(at, name)?;
-        }
-        Ok(Self::Set(Box::new(pattern)))
+        SetPattern::parse(cx).map(|pattern| Self::Set(Box::new(pattern)))
     }
 }
 
@@ -76,7 +55,6 @@ impl<'a> Parse<'a> for SetPattern<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
         let open = expect_quote(cx, QuoteId::BraceL)?;
         let mut formals = Vec::new();
-        let mut names = HashSet::new();
         let mut ellipsis = None;
 
         while cx
@@ -89,12 +67,6 @@ impl<'a> Parse<'a> for SetPattern<'a> {
             }
 
             let formal = Formal::parse(cx)?;
-            if !names.insert(formal.name.value) {
-                return Err(Error {
-                    range: formal.name.range,
-                    kind: ErrorKind::DuplicateParameter,
-                });
-            }
             let has_comma = formal.comma.is_some();
             formals.push(formal);
             if !has_comma {
@@ -109,47 +81,18 @@ impl<'a> Parse<'a> for SetPattern<'a> {
             close,
             formals,
             ellipsis,
-            binding: None,
         })
-    }
-}
-
-impl<'a> SetPattern<'a> {
-    fn set_binding(&mut self, at: Quote, name: Ident<'a>) -> Result<(), Error> {
-        if self.formals.iter().any(|formal| formal.name == name.value) {
-            return Err(Error {
-                range: name.range,
-                kind: ErrorKind::DuplicateParameter,
-            });
-        }
-
-        self.range.start = self.range.start.min(name.range.start);
-        self.range.end = self.range.end.max(name.range.end);
-        self.binding = Some((at, name));
-        Ok(())
     }
 }
 
 impl<'a> Parse<'a> for Formal<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
         let name = expect_ident(cx)?;
-        let default = if let Some(question) = take_quote(cx, QuoteId::Question) {
-            if cx.peek().is_none() {
-                return Err(Error {
-                    range: question.range.end..question.range.end,
-                    kind: ErrorKind::Empty,
-                });
-            }
-            Some((question, Expr::parse(cx)?))
-        } else {
-            None
-        };
         let comma = take_quote(cx, QuoteId::Comma);
 
         Ok(Self {
             range: name.range.start..cx.end,
             name,
-            default,
             comma,
         })
     }
