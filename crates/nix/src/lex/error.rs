@@ -3,14 +3,13 @@ use std::num::{IntErrorKind, ParseFloatError, ParseIntError};
 
 #[derive(Clone, Debug)]
 pub struct Error {
-    pub line: usize,
-    pub column: usize,
+    pub pos: usize,
     pub kind: ErrorKind,
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}: {}", self.line, self.column, self.kind)
+        write!(f, "@{}: {}", self.pos, self.kind)
     }
 }
 

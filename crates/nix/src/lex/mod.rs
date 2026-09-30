@@ -175,36 +175,7 @@ pub fn lex(str: &str) -> Result<Vec<Token<'_>>, Error> {
 
         i < str.len()
     } {
-        let mut tk = Token::lex(&str[i..]).map_err(|e| {
-            let mut line = 0;
-            let mut column = 0;
-
-            let mut j = 0;
-            while j < i {
-                match str.as_bytes()[i..] {
-                    [b'\r', b'\n', ..] => {
-                        j += 2;
-                        line += 1;
-                        column = 0;
-                    }
-                    [b'\r' | b'\n', ..] => {
-                        j += 1;
-                        line += 1;
-                        column = 0;
-                    }
-                    _ => {
-                        j += 1;
-                        column += 1;
-                    }
-                }
-            }
-
-            Error {
-                line,
-                column,
-                kind: e,
-            }
-        })?;
+        let mut tk = Token::lex(&str[i..]).map_err(|e| Error { pos: i, kind: e })?;
         tk.offset(i);
         i = tk.range().end;
         vec.push(tk);
