@@ -1,86 +1,10 @@
-use std::fmt::Display;
-use std::num::{IntErrorKind, ParseFloatError, ParseIntError};
 use std::ops::Range;
 
-use crate::macros::Span;
+mod error;
+mod types;
 
-#[derive(Clone, Debug)]
-enum ErrorKind {
-    InvalidDigit,
-    IntegerEmpty,
-    IntegerOverflow,
-    IntegerUnderflow,
-    NotFloat,
-    FloatEmpty,
-    NotString,
-    StringUnclosed,
-    IdentEmpty,
-    NotQuote,
-    Complex(Vec<Self>),
-}
-
-impl ErrorKind {
-    fn merge(mut self, mut other: Self) -> Self {
-        if let Self::Complex(vec) = &mut self {
-            vec.push(other);
-            self
-        } else if let Self::Complex(vec) = &mut other {
-            vec.push(self);
-            other
-        } else {
-            let mut errors = Vec::with_capacity(5);
-            errors.push(self);
-            errors.push(other);
-            Self::Complex(errors)
-        }
-    }
-}
-
-impl Display for ErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidDigit => write!(f, "invalid digit"),
-            Self::IntegerEmpty => write!(f, "integer cannot be empty"),
-            Self::IntegerOverflow => write!(f, "integer too big"),
-            Self::IntegerUnderflow => write!(f, "integer too small"),
-            Self::NotFloat => write!(f, "it is not float"),
-            Self::FloatEmpty => write!(f, "float cannot be empty"),
-            Self::NotString => write!(f, "it is not string"),
-            Self::StringUnclosed => write!(f, "string unclosed"),
-            Self::IdentEmpty => write!(f, "identifier cannot be empty"),
-            Self::NotQuote => write!(f, "it is not quote"),
-            Self::Complex(errors) => {
-                for (i, error) in errors.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", and ")?;
-                    }
-
-                    write!(f, "{error}")?;
-                }
-
-                Ok(())
-            }
-        }
-    }
-}
-
-impl From<ParseIntError> for ErrorKind {
-    fn from(value: ParseIntError) -> Self {
-        match value.kind() {
-            IntErrorKind::Empty => Self::IntegerEmpty,
-            IntErrorKind::InvalidDigit => Self::InvalidDigit,
-            IntErrorKind::PosOverflow => Self::IntegerOverflow,
-            IntErrorKind::NegOverflow => Self::IntegerUnderflow,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl From<ParseFloatError> for ErrorKind {
-    fn from(_value: ParseFloatError) -> Self {
-        Self::InvalidDigit
-    }
-}
+pub use error::*;
+pub use types::*;
 
 pub trait Span {
     fn range(&self) -> Range<usize>;
@@ -95,18 +19,6 @@ trait Lex<'a>: Sized {
     fn lex(src: &'a str) -> Result<Self, ErrorKind>;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Span)]
-pub struct IntegerLiteral {
-    pub range: Range<usize>,
-    pub value: i64,
-}
-
-impl PartialEq<i64> for IntegerLiteral {
-    fn eq(&self, other: &i64) -> bool {
-        self.value == *other
-    }
-}
-
 impl Lex<'_> for IntegerLiteral {
     fn lex(src: &str) -> Result<Self, ErrorKind> {
         let mut i = 0;
@@ -117,18 +29,6 @@ impl Lex<'_> for IntegerLiteral {
         let value: i64 = src[..i].parse()?;
 
         Ok(Self { range: 0..i, value })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Span)]
-pub struct FloatLiteral {
-    pub range: Range<usize>,
-    pub value: f64,
-}
-
-impl PartialEq<f64> for FloatLiteral {
-    fn eq(&self, other: &f64) -> bool {
-        self.value == *other
     }
 }
 
@@ -163,18 +63,6 @@ impl Lex<'_> for FloatLiteral {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Span)]
-pub struct StringLiteral<'a> {
-    pub range: Range<usize>,
-    pub value: &'a str,
-}
-
-impl PartialEq<&str> for StringLiteral<'_> {
-    fn eq(&self, other: &&str) -> bool {
-        self.value == *other
-    }
-}
-
 impl<'a> Lex<'a> for StringLiteral<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
         if src.as_bytes().first() != Some(&b'"') {
@@ -200,31 +88,6 @@ impl<'a> Lex<'a> for StringLiteral<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Span)]
-pub enum Literal<'a> {
-    Integer(IntegerLiteral),
-    Float(FloatLiteral),
-    String(StringLiteral<'a>),
-}
-
-impl PartialEq<i64> for Literal<'_> {
-    fn eq(&self, other: &i64) -> bool {
-        matches!(self, Self::Integer(int) if int == other)
-    }
-}
-
-impl PartialEq<f64> for Literal<'_> {
-    fn eq(&self, other: &f64) -> bool {
-        matches!(self, Self::Float(f) if f == other)
-    }
-}
-
-impl PartialEq<&str> for Literal<'_> {
-    fn eq(&self, other: &&str) -> bool {
-        matches!(self, Self::String(str) if str == other)
-    }
-}
-
 impl<'a> Lex<'a> for Literal<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
         FloatLiteral::lex(src)
@@ -239,18 +102,6 @@ impl<'a> Lex<'a> for Literal<'a> {
                     .map(Self::String)
                     .map_err(|e2| e.merge(e2))
             })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Span)]
-pub struct Ident<'a> {
-    pub range: Range<usize>,
-    pub value: &'a str,
-}
-
-impl PartialEq<&str> for Ident<'_> {
-    fn eq(&self, other: &&str) -> bool {
-        self.value == *other
     }
 }
 
@@ -272,18 +123,6 @@ impl<'a> Lex<'a> for Ident<'a> {
             range: 0..len,
             value: &src[0..len],
         })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Span)]
-pub struct Quote {
-    pub range: Range<usize>,
-    pub value: &'static str,
-}
-
-impl PartialEq<&str> for Quote {
-    fn eq(&self, other: &&str) -> bool {
-        self.value == *other
     }
 }
 
@@ -316,55 +155,12 @@ impl Lex<'_> for Quote {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Span)]
-pub enum Token<'a> {
-    Literal(Literal<'a>),
-    Ident(Ident<'a>),
-    Quote(Quote),
-}
-
-impl<'a> Token<'a> {
-    pub const fn as_literal(&self) -> Option<&Literal<'a>> {
-        match self {
-            Self::Literal(lit) => Some(lit),
-            _ => None,
-        }
-    }
-
-    pub const fn as_ident(&self) -> Option<&Ident<'a>> {
-        match self {
-            Self::Ident(id) => Some(id),
-            _ => None,
-        }
-    }
-
-    pub const fn as_quote(&self) -> Option<&Quote> {
-        match self {
-            Self::Quote(quote) => Some(quote),
-            _ => None,
-        }
-    }
-}
-
 impl<'a> Lex<'a> for Token<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
         Literal::lex(src)
             .map(Self::Literal)
             .or_else(|e| Ident::lex(src).map(Self::Ident).map_err(|e2| e.merge(e2)))
             .or_else(|e| Quote::lex(src).map(Self::Quote).map_err(|e2| e.merge(e2)))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Error {
-    line: usize,
-    column: usize,
-    kind: ErrorKind,
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}: {}", self.line, self.column, self.kind)
     }
 }
 

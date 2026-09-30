@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-pub mod lex;
-pub use lex::lex;
+mod lex;
 
 use nixus_macros as macros;
