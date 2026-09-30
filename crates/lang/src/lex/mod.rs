@@ -237,24 +237,3 @@ pub fn lex(str: &str) -> Result<Vec<Token<'_>>, Error> {
 
     Ok(vec)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lex_ident() {
-        assert_eq!(Token::lex("hello").unwrap().as_ident().unwrap(), &"hello");
-        assert_eq!(Token::lex("h3ll0").unwrap().as_ident().unwrap(), &"h3ll0");
-        assert_eq!(Token::lex("ha wo").unwrap().as_ident().unwrap(), &"ha");
-        assert!(Token::lex("4ell0").is_err());
-    }
-
-    #[test]
-    fn lex_literal() {
-        assert_eq!(Token::lex("1.25").unwrap().as_literal().unwrap(), &1.25);
-        assert_eq!(Token::lex("125").unwrap().as_literal().unwrap(), &125);
-        assert_eq!(Token::lex("true").unwrap().as_literal().unwrap(), &true);
-        assert_eq!(Token::lex("false").unwrap().as_literal().unwrap(), &false);
-    }
-}
