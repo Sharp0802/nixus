@@ -15,10 +15,24 @@ type Cx<'a> = Peekable<vec::IntoIter<Token<'a>>>;
 
 pub trait Parse<'a>: Sized {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error>;
+
+    fn parse_item(cx: &mut Cx<'a>) -> Result<Self, Error> {
+        Self::parse(cx)
+    }
 }
 
 impl<'a> Parse<'a> for Expr<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
+        Self::parse_inner(cx, false)
+    }
+
+    fn parse_item(cx: &mut Cx<'a>) -> Result<Self, Error> {
+        Self::parse_inner(cx, true)
+    }
+}
+
+impl<'a> Expr<'a> {
+    fn parse_inner(cx: &mut Cx<'a>, list_item: bool) -> Result<Self, Error> {
         let mut stack = Stack::default();
         loop {
             let Some(tk) = cx.peek() else {
@@ -69,7 +83,7 @@ impl<'a> Parse<'a> for Expr<'a> {
                 Token::Quote(Quote {
                     value: QuoteId::Sub,
                     ..
-                }) => {
+                }) if !list_item => {
                     let operator = cx.next().unwrap().into_quote().unwrap();
                     stack.push_unary(operator);
                     continue;
@@ -82,6 +96,10 @@ impl<'a> Parse<'a> for Expr<'a> {
                     });
                 }
             };
+
+            if list_item {
+                return Ok(expr);
+            }
 
             if let Some(expr) = stack.reduce(expr, cx) {
                 return Ok(expr);
@@ -119,7 +137,7 @@ impl<'a, T: Parse<'a> + Span, const P: u8, const Q: u8> Parse<'a> for Punctuated
                 break;
             }
 
-            let item = T::parse(cx)?;
+            let item = T::parse_item(cx)?;
             vec.push(item);
         }
 
