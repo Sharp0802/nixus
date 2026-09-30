@@ -114,11 +114,11 @@ impl<'a, T: Parse<'a> + Span, const P: u8, const Q: u8> Parse<'a> for Punctuated
         }
 
         let mut vec = Vec::new();
-        while cx
-            .peek()
-            .and_then(|tk| tk.as_quote())
-            .is_none_or(|quote| quote != &close_id)
-        {
+        while let Some(tk) = cx.peek() {
+            if tk.as_quote().is_some_and(|quote| quote == &close_id) {
+                break;
+            }
+
             let item = T::parse(cx)?;
             vec.push(item);
         }
