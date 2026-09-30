@@ -47,10 +47,11 @@ fn derive_span_impl(item: TokenStream2) -> Result<TokenStream2, Error> {
                 });
             }
 
-            let g = e.generic_params;
-            let name = e.name;
+            let g = &e.generic_params;
+            let ig = e.get_inline_generic_args();
+            let name = &e.name;
             Ok(quote! {
-                impl #g crate::lex::Span for #name #g {
+                impl #g crate::lex::Span for #name #ig {
                     fn range(&self) -> ::core::ops::Range<usize> {
                         match self {
                             #range_ts
@@ -66,10 +67,11 @@ fn derive_span_impl(item: TokenStream2) -> Result<TokenStream2, Error> {
             })
         }
         Item::Struct(s) => {
-            let g = s.generic_params;
-            let name = s.name;
+            let g = &s.generic_params;
+            let ig = s.get_inline_generic_args();
+            let name = &s.name;
             Ok(quote! {
-                impl #g crate::lex::Span for #name #g {
+                impl #g crate::lex::Span for #name #ig {
                     fn range(&self) -> ::core::ops::Range<usize> {
                         self.range.clone()
                     }
