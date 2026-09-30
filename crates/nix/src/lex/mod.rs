@@ -62,10 +62,6 @@ impl QuoteId {
 pub trait Span {
     fn range(&self) -> Range<usize>;
     fn offset(&mut self, offset: usize);
-
-    fn len(&self) -> usize {
-        self.range().len()
-    }
 }
 
 trait Lex<'a>: Sized {
