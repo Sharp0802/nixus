@@ -123,8 +123,9 @@ impl<'a> Lex<'a> for StringLiteral<'a> {
         }
 
         let mut i = 1;
-        while i < src.len() && src.as_bytes()[i] != b'\"' {
-            if src.as_bytes()[i..].starts_with(b"\\\"") {
+        while i < src.len() && src.as_bytes()[i] != b'"' {
+            let bstr = &src.as_bytes()[i..];
+            if bstr.starts_with(b"\\\"") || bstr.starts_with(b"\\\\") {
                 i += 2;
             } else {
                 i += 1;
