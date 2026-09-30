@@ -95,6 +95,27 @@ pub enum Token<'a> {
 }
 
 impl<'a> Token<'a> {
+    pub const fn into_literal(self) -> Option<Literal<'a>> {
+        match self {
+            Self::Literal(lit) => Some(lit),
+            _ => None,
+        }
+    }
+
+    pub const fn into_ident(self) -> Option<Ident<'a>> {
+        match self {
+            Self::Ident(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub const fn into_quote(self) -> Option<Quote> {
+        match self {
+            Self::Quote(quote) => Some(quote),
+            _ => None,
+        }
+    }
+
     pub const fn as_literal(&self) -> Option<&Literal<'a>> {
         match self {
             Self::Literal(lit) => Some(lit),
