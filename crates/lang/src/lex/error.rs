@@ -31,6 +31,8 @@ pub enum ErrorKind {
     LiteralSuffix,
     NotString,
     StringUnclosed,
+    NotPath,
+    InvalidPath,
     IdentEmpty,
     NotQuote,
     Complex(Vec<Self>),
@@ -66,6 +68,8 @@ impl Display for ErrorKind {
             Self::LiteralSuffix => write!(f, "literal suffixes are not supported"),
             Self::NotString => write!(f, "it is not string"),
             Self::StringUnclosed => write!(f, "string unclosed"),
+            Self::NotPath => write!(f, "it is not a file path"),
+            Self::InvalidPath => write!(f, "invalid file path literal"),
             Self::IdentEmpty => write!(f, "identifier cannot be empty"),
             Self::NotQuote => write!(f, "it is not quote"),
             Self::Complex(errors) => {

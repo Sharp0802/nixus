@@ -50,12 +50,25 @@ impl PartialEq<&str> for StringLiteral<'_> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Span)]
+pub struct PathLiteral<'a> {
+    pub range: Range<usize>,
+    pub value: &'a str,
+}
+
+impl PartialEq<&str> for PathLiteral<'_> {
+    fn eq(&self, other: &&str) -> bool {
+        self.value == *other
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Span)]
 pub enum Literal<'a> {
     Bool(BoolLiteral),
     Integer(IntegerLiteral),
     Float(FloatLiteral),
     String(StringLiteral<'a>),
+    Path(PathLiteral<'a>),
 }
 
 impl PartialEq<bool> for Literal<'_> {

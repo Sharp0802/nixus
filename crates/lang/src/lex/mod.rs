@@ -133,6 +133,12 @@ impl Lex<'_> for Quote {
 
 impl<'a> Lex<'a> for Token<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
+        match PathLiteral::lex(src) {
+            Ok(path) => return Ok(Self::Literal(Literal::Path(path))),
+            Err(ErrorKind::NotPath) => {}
+            Err(error) => return Err(error),
+        }
+
         if src.as_bytes().first().is_some_and(u8::is_ascii_digit) {
             return Literal::lex(src).map(Self::Literal);
         }
@@ -146,6 +152,31 @@ impl<'a> Lex<'a> for Token<'a> {
                 _ => Self::Ident(ident),
             })
             .or_else(|e| Quote::lex(src).map(Self::Quote).map_err(|e2| e.merge(e2)))
+    }
+}
+
+impl<'a> Lex<'a> for PathLiteral<'a> {
+    fn lex(src: &'a str) -> Result<Self, ErrorKind> {
+        let start = usize::from(src.starts_with("~/"));
+        let end = start
+            + src[start..]
+                .bytes()
+                .take_while(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+' | b'/')
+                })
+                .count();
+        let value = &src[..end];
+        if !value.contains('/') {
+            return Err(ErrorKind::NotPath);
+        }
+        if value.ends_with('/') || value.contains("//") || src[end..].starts_with("${") {
+            return Err(ErrorKind::InvalidPath);
+        }
+
+        Ok(Self {
+            range: 0..end,
+            value,
+        })
     }
 }
 
