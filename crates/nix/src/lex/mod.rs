@@ -42,7 +42,7 @@ impl QuoteId {
     pub fn from_str(str: &str) -> Option<Self> {
         for (i, ch) in Self::TABLE.iter().enumerate() {
             if str.starts_with(ch) {
-                let en = Self::transmute(i as u8);
+                let en = Self::transmute(i.try_into().unwrap());
                 return Some(en);
             }
         }
