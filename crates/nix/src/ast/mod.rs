@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::vec;
 
-use crate::lex::{Quote, QuoteId, Span, Token};
+use crate::lex::{Literal, Quote, QuoteId, Span, Token};
 
 mod error;
 mod stack;
@@ -58,6 +58,13 @@ impl<'a> Expr<'a> {
                     Self::Path(path)
                 }
 
+                Token::Quote(Quote {
+                    value: QuoteId::DoubleQuote,
+                    ..
+                }) => {
+                    let string = StringExpr::parse(cx)?;
+                    Self::String(string)
+                }
                 Token::Quote(Quote {
                     value: QuoteId::ParenL,
                     ..
@@ -331,5 +338,32 @@ impl<'a> Parse<'a> for Path<'a> {
             range: start..end,
             segments: vec,
         })
+    }
+}
+
+impl<'a> Parse<'a> for StringExpr<'a> {
+    fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
+        let string = Punctuated::<
+            StringPart<'a>,
+            { QuoteId::DoubleQuote as u8 },
+            { QuoteId::DoubleQuote as u8 },
+        >::parse(cx)?;
+
+        Ok(Self {
+            range: string.range,
+            parts: string.items,
+        })
+    }
+}
+
+impl<'a> Parse<'a> for StringPart<'a> {
+    fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
+        if let Some(Token::Literal(Literal::String(text))) =
+            cx.next_if(|tk| matches!(tk, Token::Literal(Literal::String(_))))
+        {
+            return Ok(Self::Text(text));
+        }
+
+        Subst::parse(cx).map(Self::Subst)
     }
 }

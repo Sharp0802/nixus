@@ -4,11 +4,13 @@ use crate::lex::Ident;
 use crate::lex::Literal;
 use crate::lex::Quote;
 use crate::lex::QuoteId;
+use crate::lex::StringLiteral;
 use crate::macros::Span;
 
 #[derive(Clone, Debug, PartialEq, Span)]
 pub enum Expr<'a> {
     Literal(Literal<'a>),
+    String(StringExpr<'a>),
     Path(Path<'a>),
     Array(Array<'a>),
     Set(Set<'a>),
@@ -16,6 +18,18 @@ pub enum Expr<'a> {
     Operation(Operation<'a>),
     Call(Call<'a>),
     Group(Group<'a>),
+}
+
+#[derive(Clone, Debug, PartialEq, Span)]
+pub struct StringExpr<'a> {
+    pub range: Range<usize>,
+    pub parts: Vec<StringPart<'a>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Span)]
+pub enum StringPart<'a> {
+    Text(StringLiteral<'a>),
+    Subst(Subst<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Span)]

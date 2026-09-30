@@ -22,6 +22,7 @@ pub enum QuoteId {
     Eq,
     Dot,
     Semicolon,
+    DoubleQuote,
     __Count,
 }
 
@@ -31,7 +32,7 @@ impl QuoteId {
         "+", "-", "*",
         "${", "{", "}",
         "[", "]", "(", ")",
-        "=", ".", ";",
+        "=", ".", ";", "\"",
     ];
 
     pub const fn transmute(val: u8) -> Self {
@@ -114,44 +115,37 @@ impl Lex<'_> for FloatLiteral {
 
 impl<'a> Lex<'a> for StringLiteral<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
-        if src.as_bytes().first() != Some(&b'"') {
-            return Err(ErrorKind::NotString);
-        }
-
-        let mut i = 1;
-        while i < src.len() && src.as_bytes()[i] != b'"' {
+        let mut i = 0;
+        while i < src.len() {
             let bstr = &src.as_bytes()[i..];
-            if bstr.starts_with(b"\\\"") || bstr.starts_with(b"\\\\") {
+            if bstr[0] == b'"' || bstr.starts_with(b"${") {
+                break;
+            }
+
+            if (bstr[0] == b'\\' && bstr.len() > 1) || bstr.starts_with(b"$$") {
                 i += 2;
             } else {
                 i += 1;
             }
         }
-        if i >= src.len() {
-            return Err(ErrorKind::StringUnclosed);
+        if i == 0 {
+            return Err(ErrorKind::NotString);
         }
 
-        let value = &src[1..i];
-        i += 1;
-
-        Ok(Self { range: 0..i, value })
+        Ok(Self {
+            range: 0..i,
+            value: &src[..i],
+        })
     }
 }
 
 impl<'a> Lex<'a> for Literal<'a> {
     fn lex(src: &'a str) -> Result<Self, ErrorKind> {
-        FloatLiteral::lex(src)
-            .map(Self::Float)
-            .or_else(|e| {
-                IntegerLiteral::lex(src)
-                    .map(Self::Integer)
-                    .map_err(|e2| e.merge(e2))
-            })
-            .or_else(|e| {
-                StringLiteral::lex(src)
-                    .map(Self::String)
-                    .map_err(|e2| e.merge(e2))
-            })
+        FloatLiteral::lex(src).map(Self::Float).or_else(|e| {
+            IntegerLiteral::lex(src)
+                .map(Self::Integer)
+                .map_err(|e2| e.merge(e2))
+        })
     }
 }
 
@@ -202,21 +196,59 @@ impl<'a> Lex<'a> for Token<'a> {
     }
 }
 
+enum Mode {
+    Expression,
+    String(usize),
+}
+
 pub fn lex(str: &str) -> Result<Vec<Token<'_>>, Error> {
     let mut vec = Vec::new();
-
+    let mut modes = Vec::new();
     let mut i = 0;
-    while {
-        while i < str.len() && str.as_bytes()[i].is_ascii_whitespace() {
-            i += 1;
+    while i < str.len() {
+        let in_string = matches!(modes.last(), Some(Mode::String(_)));
+        if !in_string {
+            while i < str.len() && str.as_bytes()[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            if i == str.len() {
+                break;
+            }
         }
 
-        i < str.len()
-    } {
-        let mut tk = Token::lex(&str[i..]).map_err(|e| Error { pos: i, kind: e })?;
+        let mut tk = if in_string {
+            match StringLiteral::lex(&str[i..]) {
+                Ok(literal) => Ok(Token::Literal(Literal::String(literal))),
+                Err(ErrorKind::NotString) => Quote::lex(&str[i..]).map(Token::Quote),
+                Err(error) => Err(error),
+            }
+        } else {
+            Token::lex(&str[i..])
+        }
+        .map_err(|e| Error { pos: i, kind: e })?;
+
+        match tk.as_quote().map(|quote| quote.value) {
+            Some(QuoteId::DoubleQuote) if in_string => {
+                modes.pop();
+            }
+            Some(QuoteId::DoubleQuote) => modes.push(Mode::String(i)),
+            Some(QuoteId::SubstL | QuoteId::BraceL) => modes.push(Mode::Expression),
+            Some(QuoteId::BraceR) => {
+                modes.pop();
+            }
+            _ => {}
+        }
+
         tk.offset(i);
         i = tk.range().end;
         vec.push(tk);
+    }
+
+    if let Some(Mode::String(start)) = modes.last() {
+        return Err(Error {
+            pos: *start,
+            kind: ErrorKind::StringUnclosed,
+        });
     }
 
     Ok(vec)

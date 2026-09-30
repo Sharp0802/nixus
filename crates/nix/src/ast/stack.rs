@@ -138,7 +138,11 @@ const fn starts_argument(tk: &Token<'_>) -> bool {
         Token::Literal(_)
             | Token::Ident(_)
             | Token::Quote(Quote {
-                value: QuoteId::SubstL | QuoteId::ParenL | QuoteId::BraceL | QuoteId::BracketL,
+                value: QuoteId::SubstL
+                    | QuoteId::ParenL
+                    | QuoteId::BraceL
+                    | QuoteId::BracketL
+                    | QuoteId::DoubleQuote,
                 ..
             })
     )
