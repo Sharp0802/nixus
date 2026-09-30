@@ -35,8 +35,12 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
-    pub const fn is_fatal(&self) -> bool {
-        matches!(self, Self::IntegerOverflow | Self::IntegerUnderflow)
+    pub fn is_fatal(&self) -> bool {
+        if let Self::Complex(vec) = self {
+            vec.iter().any(Self::is_fatal)
+        } else {
+            matches!(self, Self::IntegerOverflow | Self::IntegerUnderflow)
+        }
     }
 
     pub fn merge(mut self, mut other: Self) -> Self {
