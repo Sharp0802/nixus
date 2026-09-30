@@ -148,7 +148,7 @@ impl Lex<'_> for Quote {
             "||", "|",
             "&&", "&",
             "!", "^",
-            ",",
+            ",", ";",
         ];
 
         Err(ErrorKind::NotQuote)
