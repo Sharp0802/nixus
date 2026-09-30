@@ -271,30 +271,27 @@ impl<'a, T: Parse<'a> + Span, const P: u8, const Q: u8> Parse<'a> for Punctuated
 impl<'a> Parse<'a> for Field<'a> {
     fn parse(cx: &mut Cx<'a>) -> Result<Self, Error> {
         let path = Path::parse(cx)?;
+        let colon = cx
+            .next_if(|tk| tk.as_quote().is_some_and(|quote| quote == &QuoteId::Colon))
+            .and_then(Token::into_quote);
+        let ty = if colon.is_some() {
+            Some(Path::parse(cx)?)
+        } else {
+            None
+        };
 
         let eq = cx
-            .next()
-            .ok_or_else(|| path.range().end..path.range().end)
-            .and_then(|tk| {
-                let range = tk.range();
-                tk.into_quote().ok_or(range)
-            })
-            .map_err(|e| Error {
-                range: e,
-                kind: ErrorKind::Missing(QuoteId::Eq),
-            })?;
-        if eq != QuoteId::Eq {
-            return Err(Error {
-                range: eq.range,
-                kind: ErrorKind::Missing(QuoteId::Eq),
-            });
-        }
-
-        let expr = Expr::parse(cx)?;
+            .next_if(|tk| tk.as_quote().is_some_and(|quote| quote == &QuoteId::Eq))
+            .and_then(Token::into_quote);
+        let expr = if eq.is_some() {
+            Some(Expr::parse(cx)?)
+        } else {
+            None
+        };
 
         let semicolon = cx
             .next()
-            .ok_or_else(|| expr.range().end..expr.range().end)
+            .ok_or(cx.end..cx.end)
             .and_then(|tk| {
                 let range = tk.range();
                 tk.into_quote().ok_or(range)
@@ -313,6 +310,8 @@ impl<'a> Parse<'a> for Field<'a> {
         Ok(Self {
             range: path.range().start..semicolon.range().end,
             key: path,
+            colon,
+            ty,
             eq,
             value: expr,
             semicolon,

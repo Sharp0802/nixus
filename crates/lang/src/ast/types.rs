@@ -106,8 +106,10 @@ pub struct Path<'a> {
 pub struct Field<'a> {
     pub range: Range<usize>,
     pub key: Path<'a>,
-    pub eq: Quote,
-    pub value: Expr<'a>,
+    pub colon: Option<Quote>,
+    pub ty: Option<Path<'a>>,
+    pub eq: Option<Quote>,
+    pub value: Option<Expr<'a>>,
     pub semicolon: Quote,
 }
 
